@@ -12,6 +12,11 @@
 - **跨日去重技術**: 合併今日與昨日公告，自動識別並更新更正資訊，提供最完整的標案視野。
 - **AI 整合**: 作為 Model Context Protocol (MCP) 伺服器，讓 AI (如 Claude, Gemini) 能直接理解並分析台灣標案趨勢。
 
+## 資料來源與特別感謝 (Data Source & Acknowledgements)
+本工具的核心資料串接採用了由 [Openfun 團隊](https://github.com/openfunltd) 開發與維護的 **[PCC-API](https://pcc-api.openfun.app/)**。
+
+我們由衷感謝 Openfun 團隊在台灣政府電子採購開放資料處理上的辛勤付出。他們將龐大且複雜的政府標案 JSON 資料，整理為結構清晰且高效的 API 介面，才使得本 MCP 工具的開發成為可能。
+
 ## 安裝與快速上手 (Getting Started)
 
 ### 前置需求

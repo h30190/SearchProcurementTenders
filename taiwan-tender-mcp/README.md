@@ -15,8 +15,13 @@
 ## 技術架構
 - **Runtime**: Node.js
 - **Protocol**: Model Context Protocol (MCP)
-- **Data Source**: 政府開放平台「招標公告-當日」(Dataset ID: 30265)
+- **Data Source**: 
+  - 主要介面：[pcc-api.openfun.app](https://pcc-api.openfun.app/)
+  - 資料基礎：政府資料開放平台「招標公告」(Dataset ID: 30265)
 - **Dependencies**: `@modelcontextprotocol/sdk`, `axios`, `zod`
+
+## 特別感謝 (Acknowledgements)
+本專案的資料查詢介面採用了 [Openfun 團隊](https://github.com/openfunltd) 開發與維護的 **PCC-API**。感謝他們在開放資料處理上的卓越貢獻，將繁瑣的政府標案資料轉換為開發者友好的 API，大幅降低了台灣標案資訊自動化的門檻。
 
 ## 篩選邏輯說明
 為了確保回傳給 AI 的資料品質，程式會執行以下過濾：

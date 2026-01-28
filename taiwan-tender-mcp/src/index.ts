@@ -5,41 +5,47 @@ import { fetchAndFilterTenders } from "./tender-service.js";
 
 const server = new McpServer({
   name: "taiwan-tender-searcher",
-  version: "1.0.0",
+  version: "1.2.0",
 });
 
 server.tool(
   "search_tenders",
-  "搜尋台灣政府最新的招標公告與更正公告（自動過濾已結案或非招標案件）",
+  "搜尋台灣政府招標中標案並以表格回傳（上限 30 筆）",
   {
-    keyword: z.string().describe("搜尋關鍵字（例如：'AI'、'系統開發'、'室內裝修'）"),
+    keyword: z.string().describe("搜尋關鍵字"),
   },
   async ({ keyword }) => {
-    const results = await fetchAndFilterTenders(keyword);
+    try {
+      const { results, hasMore } = await fetchAndFilterTenders(keyword);
 
-    if (typeof results === "string") {
-      return { content: [{ type: "text", text: results }] };
+      if (results.length === 0) {
+        return { content: [{ type: "text", text: `目前找不到與「${keyword}」相關且尚在投標期限內的招標案件。` }] };
+      }
+
+      let table = "| 公告日期 | 截止投標 | 剩餘天數 | 招標類別 | 標案案號 | 標案名稱 | 預算金額 | 決標概況 | 連結 |\n";
+      table += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n";
+
+      for (const t of results) {
+        const sanitize = (s: any) => String(s).replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
+        table += `| ${sanitize(t.publishDate)} | ${sanitize(t.deadline)} | **${sanitize(t.remainingDays)}** | ${sanitize(t.type)} | ${sanitize(t.caseId)} | ${sanitize(t.title)} | ${sanitize(t.budget)} | ${sanitize(t.awardType)} | [查看](${t.link}) |\n`;
+      }
+
+      let footer = `\n> [!TIP]\n> 以上資料由 PCC Smart Search 自動整理。`;
+      if (hasMore) {
+        footer += `\n> **注意：搜尋結果超過 30 筆，僅顯示前 30 筆。若需更多結果，請縮小關鍵字範圍或告知我繼續爬取。**`;
+      }
+
+      return {
+        content: [
+          {
+            type: "text", 
+            text: `### 搜尋關鍵字：「${keyword}」\n\n${table}${footer}` 
+          }
+        ],
+      };
+    } catch (error: any) {
+      return { content: [{ type: "text", text: `錯誤: ${error.message}` }] };
     }
-
-    if (results.length === 0) {
-      return { content: [{ type: "text", text: `根據政府目前的公告，找不到與「${keyword}」相關的活動中標案。` }] };
-    }
-
-    const formattedText = results.map(t => 
-      `### ${t.type} ${t.title}\n` +
-      `- **機關**：${t.org}\n` +
-      `- **日期**：${t.date}\n` +
-      `- **連結**：[點此開啟標案網頁](${t.link})\n`
-    ).join("\n---\n\n");
-
-    return {
-      content: [
-        {
-          type: "text", 
-          text: `找到以下與「${keyword}」相關的最新標案：\n\n${formattedText}` 
-        }
-      ],
-    };
   }
 );
 
