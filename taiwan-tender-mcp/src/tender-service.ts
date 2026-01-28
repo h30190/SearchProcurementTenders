@@ -14,74 +14,71 @@ export interface TenderRecord {
   };
 }
 
-export interface TenderDetail {
-  [key: string]: any;
+/**
+ * 彈性提取 Detail 中的值 (處理全半型冒號與不同前綴)
+ */
+function getValue(detail: any, keyNames: string[]): string {
+  if (!detail) return "-";
+  const keys = Object.keys(detail);
+  for (const name of keyNames) {
+    const foundKey = keys.find(k => k.includes(name));
+    if (foundKey) return String(detail[foundKey]).trim();
+  }
+  return "-";
 }
 
 /**
- * 解析民國日期字串 (如 "114/01/27 17:00") 並轉換為 Date 物件
+ * 解析日期字串 (處理 "114/01/27 17:00")
  */
 function parseROCDate(dateStr: string): Date | null {
-  if (!dateStr) return null;
-  const parts = dateStr.trim().split(/[\/\s:]/);
-  if (parts.length < 3) return null;
+  if (!dateStr || dateStr === "-") return null;
+  const match = dateStr.match(/(\d+)\/(\d+)\/(\d+)(?:\s+(\d+):(\d+))?/);
+  if (!match) return null;
 
-  const year = parseInt(parts[0]) + 1911;
-  const month = parseInt(parts[1]) - 1;
-  const day = parseInt(parts[2]);
-  const hour = parts[3] ? parseInt(parts[3]) : 0;
-  const minute = parts[4] ? parseInt(parts[4]) : 0;
+  const year = parseInt(match[1]) + 1911;
+  const month = parseInt(match[2]) - 1;
+  const day = parseInt(match[3]);
+  const hour = match[4] ? parseInt(match[4]) : 0;
+  const minute = match[5] ? parseInt(match[5]) : 0;
 
   return new Date(year, month, day, hour, minute);
 }
 
-/**
- * 計算剩餘天數
- */
 function getRemainingDays(deadline: Date): string {
   const now = new Date();
   const diff = deadline.getTime() - now.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const totalHours = diff / (1000 * 60 * 60);
+  const days = Math.floor(totalHours / 24);
 
   if (diff < 0) return "已截止";
-  if (days === 0) return "今日截止";
+  if (days === 0 && totalHours > 0) return "今日截止";
   return `${days} 天`;
 }
 
-/**
- * 抓取單一標案的詳細資訊
- */
 async function fetchTenderDetail(unitId: string, jobNumber: string, searchDate: number, searchFilename: string) {
   try {
     const url = `https://pcc-api.openfun.app/api/tender?unit_id=${unitId}&job_number=${jobNumber}`;
     const res = await axios.get(url, { timeout: 5000 });
     const records = res.data.records as any[];
-    
     if (!records || records.length === 0) return null;
 
     let matched = records.find(r => r.date === searchDate && r.filename === searchFilename);
     if (!matched) matched = records[0];
-
-    return matched.detail as TenderDetail;
-  } catch (error) {
+    return matched.detail;
+  } catch {
     return null;
   }
 }
 
-/**
- * 抓取並篩選標案
- */
 export async function fetchAndFilterTenders(keyword: string) {
   try {
     const encodedKeyword = encodeURIComponent(keyword);
     const url = `https://pcc-api.openfun.app/api/searchbytitle?query=${encodedKeyword}`;
-    
     const response = await axios.get(url, { timeout: 10000 });
     const records = response.data.records as TenderRecord[];
 
     if (!records || records.length === 0) return { results: [], hasMore: false };
 
-    // 1. 初步篩選招標案件
     const candidates = records.filter(item => {
       const type = item.brief.type || "";
       return type.includes('招標') || type.includes('資格名單');
@@ -91,17 +88,17 @@ export async function fetchAndFilterTenders(keyword: string) {
     const baseResults = candidates.slice(0, limit);
     const hasMore = candidates.length > limit;
 
-    // 2. 並行抓取詳細資訊
     const results = await Promise.all(
       baseResults.map(async (item) => {
         const detail = await fetchTenderDetail(item.unit_id, item.job_number, item.date, item.filename);
         
-        const publishDate = detail?.["招標資訊:公告日期"] || item.date.toString();
-        const deadlineStr = detail?.["截止投標:截止投標時間"] || "-";
-        const budget = detail?.["招標資訊:預算金額"] || "-";
-        const awardType = detail?.["決標資訊:決標方式"] || "-";
-        const tenderType = detail?.["招標資訊:招標方式"] || item.brief.type || "-";
-        const caseId = detail?.["招標資訊:標案案號"] || item.job_number;
+        // 增加更多可能的 Key 組合以提高命中率
+        const publishDate = getValue(detail, ["公告日期", "日期"]) !== "-" ? getValue(detail, ["公告日期", "日期"]) : item.date.toString();
+        const deadlineStr = getValue(detail, ["截止投標時間", "截止投標", "投標期限"]);
+        const budget = getValue(detail, ["預算金額", "採購金額"]);
+        const awardType = getValue(detail, ["決標方式", "決標概況"]);
+        const tenderType = getValue(detail, ["招標方式", "招標類別"]) !== "-" ? getValue(detail, ["招標方式", "招標類別"]) : (item.brief.type || "-");
+        const caseId = getValue(detail, ["標案案號", "案號"]) !== "-" ? getValue(detail, ["標案案號", "案號"]) : item.job_number;
         
         let remainingDays = "-";
         const deadlineDate = parseROCDate(deadlineStr);
@@ -123,15 +120,13 @@ export async function fetchAndFilterTenders(keyword: string) {
       })
     );
 
-    // 3. 過濾掉已截止的案件
-    const filteredResults = results.filter(r => r.remainingDays !== "已截止");
+    // 過濾已截止案件並排序
+    const filteredResults = results
+      .filter(r => r.remainingDays !== "已截止")
+      .sort((a, b) => b.publishDate.localeCompare(a.publishDate));
     
-    return { 
-      results: filteredResults, 
-      hasMore: hasMore || (candidates.length > filteredResults.length && candidates.length > limit)
-    };
+    return { results: filteredResults, hasMore };
   } catch (error) {
-    console.error('Fetch Error:', error);
     throw new Error("連線標案 API 失敗");
   }
 }
