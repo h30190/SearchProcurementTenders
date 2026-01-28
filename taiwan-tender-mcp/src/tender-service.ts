@@ -15,32 +15,32 @@ export interface TenderRecord {
 }
 
 /**
- * 彈性提取 Detail 中的值 (處理全半型冒號與不同前綴)
+ * 強健提取：搜尋 records 中所有可能包含關鍵字的欄位
  */
-function getValue(detail: any, keyNames: string[]): string {
-  if (!detail) return "-";
-  const keys = Object.keys(detail);
-  for (const name of keyNames) {
-    const foundKey = keys.find(k => k.includes(name));
-    if (foundKey) return String(detail[foundKey]).trim();
+function findInfo(history: any[], keywords: string[]): string {
+  for (const rec of history) {
+    if (!rec || !rec.detail) continue;
+    const detail = rec.detail;
+    const keys = Object.keys(detail);
+    for (const kw of keywords) {
+      const foundKey = keys.find(k => k.replace(/：/g, ':').includes(kw));
+      if (foundKey && detail[foundKey] && !["-", "", "無"].includes(String(detail[foundKey]).trim())) {
+        return String(detail[foundKey]).trim();
+      }
+    }
   }
   return "-";
 }
 
-/**
- * 解析日期字串 (處理 "114/01/27 17:00")
- */
 function parseROCDate(dateStr: string): Date | null {
   if (!dateStr || dateStr === "-") return null;
   const match = dateStr.match(/(\d+)\/(\d+)\/(\d+)(?:\s+(\d+):(\d+))?/);
   if (!match) return null;
-
   const year = parseInt(match[1]) + 1911;
   const month = parseInt(match[2]) - 1;
   const day = parseInt(match[3]);
   const hour = match[4] ? parseInt(match[4]) : 0;
   const minute = match[5] ? parseInt(match[5]) : 0;
-
   return new Date(year, month, day, hour, minute);
 }
 
@@ -49,56 +49,66 @@ function getRemainingDays(deadline: Date): string {
   const diff = deadline.getTime() - now.getTime();
   const totalHours = diff / (1000 * 60 * 60);
   const days = Math.floor(totalHours / 24);
-
   if (diff < 0) return "已截止";
   if (days === 0 && totalHours > 0) return "今日截止";
   return `${days} 天`;
 }
 
-async function fetchTenderDetail(unitId: string, jobNumber: string, searchDate: number, searchFilename: string) {
-  try {
-    const url = `https://pcc-api.openfun.app/api/tender?unit_id=${unitId}&job_number=${jobNumber}`;
-    const res = await axios.get(url, { timeout: 5000 });
-    const records = res.data.records as any[];
-    if (!records || records.length === 0) return null;
-
-    let matched = records.find(r => r.date === searchDate && r.filename === searchFilename);
-    if (!matched) matched = records[0];
-    return matched.detail;
-  } catch {
-    return null;
-  }
-}
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function fetchAndFilterTenders(keyword: string) {
   try {
     const encodedKeyword = encodeURIComponent(keyword);
-    const url = `https://pcc-api.openfun.app/api/searchbytitle?query=${encodedKeyword}`;
-    const response = await axios.get(url, { timeout: 10000 });
-    const records = response.data.records as TenderRecord[];
+    const searchUrl = `https://pcc-api.openfun.app/api/searchbytitle?query=${encodedKeyword}`;
+    const searchRes = await axios.get(searchUrl, { timeout: 15000 });
+    const records = searchRes.data.records as TenderRecord[];
 
     if (!records || records.length === 0) return { results: [], hasMore: false };
 
     const candidates = records.filter(item => {
-      const type = item.brief.type || "";
-      return type.includes('招標') || type.includes('資格名單');
+      const t = item.brief.type || "";
+      return t.includes("招標") || t.includes("資格名單");
     });
 
-    const limit = 30;
-    const baseResults = candidates.slice(0, limit);
-    const hasMore = candidates.length > limit;
+    const uniqueMap = new Map<string, TenderRecord>();
+    candidates.forEach(rec => {
+      const key = `${rec.unit_id}_${rec.job_number}`;
+      const existing = uniqueMap.get(key);
+      if (!existing || rec.date > existing.date) uniqueMap.set(key, rec);
+    });
 
-    const results = await Promise.all(
-      baseResults.map(async (item) => {
-        const detail = await fetchTenderDetail(item.unit_id, item.job_number, item.date, item.filename);
+    const sortedUnique = Array.from(uniqueMap.values()).sort((a, b) => b.date - a.date);
+    const limit = 20;
+    const baseResults = sortedUnique.slice(0, limit);
+    const hasMore = sortedUnique.length > limit;
+
+    const results = [];
+    for (const item of baseResults) {
+      try {
+        const tenderUrl = `https://pcc-api.openfun.app/api/tender?unit_id=${item.unit_id}&job_number=${item.job_number}`;
+        const detailRes = await axios.get(tenderUrl, { timeout: 8000 });
+        const history = detailRes.data.records as any[];
         
-        // 增加更多可能的 Key 組合以提高命中率
-        const publishDate = getValue(detail, ["公告日期", "日期"]) !== "-" ? getValue(detail, ["公告日期", "日期"]) : item.date.toString();
-        const deadlineStr = getValue(detail, ["截止投標時間", "截止投標", "投標期限"]);
-        const budget = getValue(detail, ["預算金額", "採購金額"]);
-        const awardType = getValue(detail, ["決標方式", "決標概況"]);
-        const tenderType = getValue(detail, ["招標方式", "招標類別"]) !== "-" ? getValue(detail, ["招標方式", "招標類別"]) : (item.brief.type || "-");
-        const caseId = getValue(detail, ["標案案號", "案號"]) !== "-" ? getValue(detail, ["標案案號", "案號"]) : item.job_number;
+        const publishDate = findInfo(history, ["公告日", "日期"]);
+        const deadlineStr = findInfo(history, ["截止投標"]);
+        const caseId = findInfo(history, ["標案案號", "案號"]);
+        const title = findInfo(history, ["標案名稱", "案名"]);
+        const budget = findInfo(history, ["預算金額", "金額"]);
+        
+        // 修正連結抓取邏輯：嚴格抓取 detail.url 且不做不必要的拼接
+        let link = "-";
+        if (history && history.length > 0) {
+          // 只要找到任何一筆歷史紀錄中有 url 就採用 (通常第一筆就是最新的)
+          const recWithUrl = history.find(r => r.detail && r.detail.url);
+          link = recWithUrl ? recWithUrl.detail.url : "-";
+        }
+        
+        // 只有在確實是相對路徑時才補全
+        if (link.startsWith("/") && !link.startsWith("//")) {
+          link = `https://web.pcc.gov.tw${link}`;
+        }
+
+        const tenderType = (history && history[0]?.type) || item.brief.type || "-";
         
         let remainingDays = "-";
         const deadlineDate = parseROCDate(deadlineStr);
@@ -106,27 +116,26 @@ export async function fetchAndFilterTenders(keyword: string) {
           remainingDays = getRemainingDays(deadlineDate);
         }
 
-        return {
-          publishDate,
+        results.push({
+          publishDate: publishDate !== "-" ? publishDate : String(item.date),
           deadline: deadlineStr,
           remainingDays,
           type: tenderType,
-          caseId,
-          title: item.brief.title,
+          caseId: caseId !== "-" ? caseId : item.job_number,
+          title: title !== "-" ? title : item.brief.title,
           budget,
-          awardType,
-          link: `https://web.pcc.gov.tw/tps/tpam/main/tps/tpam/tpam_check.do?searchMode=common&method=initItm&unit_id=${item.unit_id}&job_number=${item.job_number}`
-        };
-      })
-    );
+          link
+        });
+        
+        await sleep(50);
+      } catch (e) {
+        continue;
+      }
+    }
 
-    // 過濾已截止案件並排序
-    const filteredResults = results
-      .filter(r => r.remainingDays !== "已截止")
-      .sort((a, b) => b.publishDate.localeCompare(a.publishDate));
-    
-    return { results: filteredResults, hasMore };
+    const finalResults = results.filter(r => r.remainingDays !== "已截止");
+    return { results: finalResults, hasMore };
   } catch (error) {
-    throw new Error("連線標案 API 失敗");
+    throw new Error("Connection failed to Procurement API");
   }
 }

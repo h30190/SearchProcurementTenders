@@ -5,12 +5,12 @@ import { fetchAndFilterTenders } from "./tender-service.js";
 
 const server = new McpServer({
   name: "taiwan-tender-searcher",
-  version: "1.2.0",
+  version: "1.3.0",
 });
 
 server.tool(
   "search_tenders",
-  "搜尋台灣政府招標中標案並以表格回傳（上限 30 筆）",
+  "搜尋台灣政府標案並以精確表格回傳（依公告日、截止投標、剩餘天數、類別、案號、案名、預算、連結排序）",
   {
     keyword: z.string().describe("搜尋關鍵字"),
   },
@@ -19,32 +19,33 @@ server.tool(
       const { results, hasMore } = await fetchAndFilterTenders(keyword);
 
       if (results.length === 0) {
-        return { content: [{ type: "text", text: `目前找不到與「${keyword}」相關且尚在投標期限內的招標案件。` }] };
+        return { content: [{ type: "text", text: `找不到與「${keyword}」相關且可投標的案件。` }] };
       }
 
-      let table = "| 公告日期 | 截止投標 | 剩餘天數 | 招標類別 | 標案案號 | 標案名稱 | 預算金額 | 決標概況 | 連結 |\n";
-      table += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n";
+      // 建立 Markdown 表格，欄位順序完全遵照使用者需求
+      let table = "| 公告日 | 截止投標 | 剩餘天數 | 招標類別 | 標案案號 | 標案名稱 | 預算金額 | 連結 |\n";
+      table += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n";
 
       for (const t of results) {
         const sanitize = (s: any) => String(s).replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
-        table += `| ${sanitize(t.publishDate)} | ${sanitize(t.deadline)} | **${sanitize(t.remainingDays)}** | ${sanitize(t.type)} | ${sanitize(t.caseId)} | ${sanitize(t.title)} | ${sanitize(t.budget)} | ${sanitize(t.awardType)} | [查看](${t.link}) |\n`;
+        table += `| ${sanitize(t.publishDate)} | ${sanitize(t.deadline)} | **${sanitize(t.remainingDays)}** | ${sanitize(t.type)} | ${sanitize(t.caseId)} | ${sanitize(t.title)} | ${sanitize(t.budget)} | [查看](${t.link}) |\n`;
       }
 
-      let footer = `\n> [!TIP]\n> 以上資料由 PCC Smart Search 自動整理。`;
+      let footer = `\n> [!TIP]\n> 資料來源：PCC Smart Search (基於 Openfun PCC-API)`;
       if (hasMore) {
-        footer += `\n> **注意：搜尋結果超過 30 筆，僅顯示前 30 筆。若需更多結果，請縮小關鍵字範圍或告知我繼續爬取。**`;
+        footer += "\n> **注意：搜尋結果較多，僅顯示前 30 筆。若需更多請縮小關鍵字範圍。**";
       }
 
       return {
         content: [
           {
             type: "text", 
-            text: `### 搜尋關鍵字：「${keyword}」\n\n${table}${footer}` 
+            text: `### 關鍵字「${keyword}」的最新招標資訊\n\n${table}${footer}` 
           }
         ],
       };
     } catch (error: any) {
-      return { content: [{ type: "text", text: `錯誤: ${error.message}` }] };
+      return { content: [{ type: "text", text: `搜尋失敗: ${error.message}` }] };
     }
   }
 );
