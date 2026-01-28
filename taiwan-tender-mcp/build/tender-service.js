@@ -1,59 +1,38 @@
 import axios from 'axios';
-// 政府開放平台「招標公告-當日」資料集 ID
-const DATASET_ID = '30265';
-const METADATA_URL = `https://data.gov.tw/api/v2/rest/dataset/${DATASET_ID}`;
+/**
+ * 使用 pcc-api.openfun.app 抓取並篩選標案
+ */
 export async function fetchAndFilterTenders(keyword) {
     try {
-        // 1. 取得最新資源連結 (Metadata)
-        const meta = await axios.get(METADATA_URL);
-        const resources = meta.data.result.resources;
-        // 取得最近的兩個 JSON 資源 (今天與昨天)
-        const jsonResources = resources
-            .filter((r) => r.format.toUpperCase() === 'JSON')
-            .slice(0, 2);
-        if (jsonResources.length === 0)
-            return "目前政府平台尚未提供 JSON 資料。";
-        // 2. 並行下載資料
-        const dataArrays = await Promise.all(jsonResources.map(async (res) => {
-            try {
-                const resp = await axios.get(res.url, { timeout: 10000 });
-                return resp.data;
-            }
-            catch (e) {
-                console.error(`下載資源失敗: ${res.url}`, e);
-                return [];
-            }
-        }));
-        // 3. 合併、去重、過濾
-        const tenderMap = new Map();
-        const searchKeyword = keyword.toLowerCase();
-        dataArrays.flat().forEach(item => {
-            if (!item || !item.標案名稱)
-                return;
-            // 篩選條件：只要「招標公告」或「更正公告」
-            const isLive = item.公告類別 === '招標公告' || item.公告類別 === '更正公告';
-            const matches = item.標案名稱.toLowerCase().includes(searchKeyword) ||
-                item.招標機關名稱.toLowerCase().includes(searchKeyword);
-            if (isLive && matches) {
-                // 去重邏輯：如果案號重複，更正公告優先覆蓋，或保留最新看到的
-                const existing = tenderMap.get(item.案號);
-                if (!existing || item.公告類別 === '更正公告') {
-                    tenderMap.set(item.案號, {
-                        title: item.標案名稱,
-                        org: item.招標機關名稱,
-                        type: item.公告類別 === '更正公告' ? '[更正]' : '[招標]',
-                        budget: item.預算金額,
-                        deadline: item.截止投標時間,
-                        // 自動拼湊直接連結
-                        link: `https://web.pcc.gov.tw/tps/tpam/main/tps/tpam/tpam_check.do?searchMode=common&method=initItm&unit_id=${item.招標機關代碼}&job_number=${item.案號}`
-                    });
-                }
-            }
+        const encodedKeyword = encodeURIComponent(keyword);
+        const url = `https://pcc-api.openfun.app/api/searchbytitle?query=${encodedKeyword}`;
+        const response = await axios.get(url, { timeout: 10000 });
+        const records = response.data.records;
+        if (!records || records.length === 0)
+            return [];
+        // 在程式端進行過濾
+        const filteredResults = records
+            .filter(item => {
+            const type = item.brief.type || "";
+            // 篩選：只要包含「招標」字眼的（如公開招標、更正招標公告等）
+            const isLive = type.includes('招標');
+            return isLive;
+        })
+            .map(item => {
+            return {
+                title: item.brief.title,
+                org: item.unit_name,
+                type: item.brief.type,
+                // 轉換日期 (從 YYYYMMDD 格式轉換，openfun 提供的是 Unix timestamp 或數字)
+                date: item.date,
+                // 自動拼湊直接連結 (使用 openfun 的資訊或 pcc 官網格式)
+                link: `https://web.pcc.gov.tw/tps/tpam/main/tps/tpam/tpam_check.do?searchMode=common&method=initItm&unit_id=${item.unit_id}&job_number=${item.job_number}`
+            };
         });
-        return Array.from(tenderMap.values());
+        return filteredResults;
     }
     catch (error) {
         console.error('Fetch Error:', error);
-        return "抓取標案資料時發生錯誤，可能政府平台連線不穩，請稍後再試。";
+        return "連線標案 API 失敗，請稍後再試。";
     }
 }
