@@ -1,15 +1,15 @@
 # Taiwan Tender MCP
 
-![Version](https://img.shields.io/badge/version-v0.0.1-blue.svg)
+![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)
 
 基於 MCP 協定的台灣標案自動化查詢工具，直接對接政府開放平台資料，提供精確、合規且高效的標案情報。
 
 ---
 
 ## 核心特色 (Key Features)
-- **合規資料源**: 直接對接政府資料開放平台 (data.gov.tw)，遵循開放資料授權，無版權爭議。
+- **合規資料源**: 串接 PCC-API 取得政府公開標案資料，確保資料來源合法且穩定。
 - **程式端預篩選**: 在 Node.js 端即時過濾「招標公告」與「更正公告」，確保資料活標性質並節省 AI Token。
-- **跨日去重技術**: 合併今日與昨日公告，自動識別並更新更正資訊，提供最完整的標案視野。
+- **智慧去重技術**: 自動識別並過濾重複案號，優先保留最新資訊，提供最準確的標案列表。
 - **AI 整合**: 作為 Model Context Protocol (MCP) 伺服器，讓 AI (如 Claude, Gemini) 能直接理解並分析台灣標案趨勢。
 
 ## 資料來源與特別感謝 (Data Source & Acknowledgements)
@@ -32,6 +32,7 @@
 詳細開發流程請參閱 [DEVELOPMENT_SOP.md](./DEVELOPMENT_SOP.md)。
 
 ## 授權與宣告 (License & Disclaimer)
+- **授權條款**：本專案採用 [MIT License](./LICENSE) 開源授權。
 - **版權所有**：Copyright (c) 2026 加號設計數位工程有限公司 (HJPLUS.DESIGN Ltd.)。
 - **使用規範**：本產品規範詳見 [RELEASE_STANDARDS.md](./RELEASE_STANDARDS.md)。
 

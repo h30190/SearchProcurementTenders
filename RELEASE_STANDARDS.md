@@ -27,7 +27,7 @@
 
 - [x] **package.json**: `version` 與 `name` 符合規範。
 - [x] **README.md**: 已更新安裝步驟與最新特色。
-- [x] **CHANGELOG.md**: 建立符合 SemVer 規範的版次 (目前為 0.0.1)。
+- [x] **CHANGELOG.md**: 建立符合 SemVer 規範的版次 (目前為 1.0.0)。
 
 ---
 *最後編輯: 2026-01-28*
