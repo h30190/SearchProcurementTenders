@@ -31,6 +31,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+.gitignore
 
 # Environment
 .env
