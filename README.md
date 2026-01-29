@@ -29,6 +29,7 @@
 ### 1. 環境準備
 - 安裝 [Node.js](https://nodejs.org/) (v20 或以上版本)。
 - 確認已安裝 `npm` 與 `git`。
+- 若您的環境未安裝 Git，亦可直接從 GitHub 頁面點擊 **「Code」** > **「Download ZIP」** 下載原始碼壓縮檔並解壓縮。
 
 ### 2. 下載與編譯 (Build)
 ```bash
@@ -53,7 +54,7 @@ npm run build
     "taiwan_tenders": {
       "command": "node",
       "args": [
-        "C:/Users/[使用者名稱]/.../SearchProcurementTenders/taiwan-tender-mcp/build/index.js"
+        "C:\\Users\\[使用者名稱]\\...\\SearchProcurementTenders\\taiwan-tender-mcp\\build\\index.js"
       ]
     }
   }
