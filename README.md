@@ -63,9 +63,8 @@ npm run build
 
 ## 使用範例 (Usage Examples)
 您可以對 AI 說：
-- 「搜尋近期與 AI 或 系統開發 相關的標案」
+- 「搜尋近期與 新建工程 相關的標案」
 - 「幫我找台北市的 裝修 標案」
-- 「看看這兩天有沒有 冷氣安裝 的工程」
 
 ## 資料來源與特別感謝 (Acknowledgements)
 本工具的核心資料串接採用了由 [Openfun 團隊](https://github.com/openfunltd) 開發與維護的 **[PCC-API](https://pcc-api.openfun.app/)**。
