@@ -1,3 +1,7 @@
+# 🚨 更新通知
+這個 repo 已經有新版本，請使用以下網址的版本：
+https://github.com/h30190/SearchProcurementTenders-crawler.Ver
+
 # Taiwan Tender MCP
 
 ![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)
